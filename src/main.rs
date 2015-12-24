@@ -7,6 +7,8 @@ use std::fs::File;
 use glium::{DisplayBuild, Surface};
 use glium::glutin::{VirtualKeyCode, ElementState};
 use time::now_utc;
+use std::thread;
+use std::sync::mpsc::{sync_channel, Receiver};
 
 
 fn get_us() -> u64 {
@@ -21,25 +23,10 @@ struct Picture {
 }
 
 impl Picture {
-    pub fn new<F>(filename: &str, display: &F) -> Self
-        where F: glium::backend::Facade {
-        
-        println!("Loading file {}...", filename);
-        let t1 = get_us();
-        let file = File::open(filename).unwrap();
-        let t2 = get_us();
-        let image = image::load(file, image::JPEG).unwrap().to_rgba();
-        let t3 = get_us();
-        let image_dimensions = image.dimensions();
-        let t4 = get_us();
-        let image = glium::texture::RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dimensions);
-        let t5 = get_us();
-        let texture = glium::texture::SrgbTexture2d::new(display, image).unwrap();
-        let t6 = get_us();
-        println!("Loaded {} in {} + {} + {} + {} us", filename, t2 - t1, t3 - t2, t5 - t4, t6 - t5);
+    pub fn new(texture: glium::texture::SrgbTexture2d) -> Self {
         Picture {
             texture: texture,
-            aspect_ratio: image_dimensions.0 as f32 / image_dimensions.1 as f32
+            aspect_ratio: 1.0 //image_dimensions.0 as f32 / image_dimensions.1 as f32
         }
     }
 }
@@ -136,17 +123,16 @@ struct Vertex {
 implement_vertex!(Vertex, position, tex_coords);
 
     
-struct Renderer {
-    source: Vec<String>,
-    source_index: usize,
+struct Renderer<'a> {
+    source_rx: Receiver<glium::texture::RawImage2d<'a, u8>>,
     display: glium::backend::glutin_backend::GlutinFacade,
     program: glium::Program,
     current: Option<(Picture, PictureState)>,
     next: Option<(Picture, PictureState)>
 }
 
-impl Renderer {
-    pub fn new(source: Vec<String>) -> Renderer {
+impl<'a> Renderer<'a> {
+    pub fn new(source_rx: Receiver<glium::texture::RawImage2d<'a, u8>>) -> Renderer<'a> {
         let display = glium::glutin::WindowBuilder::new()
             .with_depth_buffer(24)
             .with_vsync()
@@ -185,8 +171,7 @@ impl Renderer {
         let program = glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src,
                                                   None).unwrap();
         Renderer {
-            source: source,
-            source_index: 0,
+            source_rx: source_rx,
             display: display,
             program: program,
             current: None,
@@ -195,12 +180,14 @@ impl Renderer {
     }
 
     fn load_next_pic(&mut self) -> Picture {
-        let filename = &self.source[self.source_index];
-        self.source_index += 1;
-        if self.source_index >= self.source.len() {
-            self.source_index = 0;
-        }
-        let pic = Picture::new(filename, &self.display);
+        let t1 = get_us();
+        let image = self.source_rx.recv().unwrap();
+        let t2 = get_us();
+        let texture = glium::texture::SrgbTexture2d::new(&self.display, image).unwrap();
+        let t3 = get_us();
+        let pic = Picture::new(texture);
+        let t4 = get_us();
+        println!("Converted pic in {} + {} + {} us", t2 - t1, t3 - t2, t4 - t3);
         pic
     }
 
@@ -304,15 +291,31 @@ impl Renderer {
 }
 
 fn main() {
-    let mut renderer = Renderer::new(
-        std::env::args()
-        .skip(1)
-        .collect()
-    );
-
-    let mut tick = 0;
+    let (source_tx, source_rx) = sync_channel(1);
+    let mut renderer = Renderer::new(source_rx);
+    thread::spawn(move|| {
+        let filenames: Vec<String> = std::env::args()
+            .skip(1)
+            .collect();
+        loop {
+            for filename in &filenames {
+                println!("Loading file {}...", filename);
+                let t1 = get_us();
+                let file = File::open(filename).unwrap();
+                let t2 = get_us();
+                let image = image::load(file, image::JPEG).unwrap().to_rgba();
+                let t3 = get_us();
+                let image_dimensions = image.dimensions();
+                let t4 = get_us();
+                let image = glium::texture::RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dimensions);
+                let t5 = get_us();
+                println!("Loaded {} in {} + {} + {} us", filename, t2 - t1, t3 - t2, t5 - t4);
+                source_tx.send(image);
+            }
+        }
+    });
+    
     while renderer.update() {
         renderer.render();
-        tick += 1;
     }
 }
