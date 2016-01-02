@@ -10,7 +10,6 @@ mod render;
 mod util;
 mod source;
 
-use util::*;
 use render::*;
 
 fn main() {

@@ -19,7 +19,7 @@ pub fn run<'a>(filenames: Vec<String>, tx: SyncSender<RawImage2d<'a, u8>>) {
             let image = RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dimensions);
             let t5 = get_us();
             println!("Loaded {} in {} + {} + {} us", filename, t2 - t1, t3 - t2, t5 - t4);
-            tx.send(image);
+            tx.send(image).unwrap();
         }
     }
 }

@@ -12,15 +12,13 @@ use std::sync::mpsc::Receiver;
 use util::*;
 
 struct Picture {
-    texture: SrgbTexture2d,
-    aspect_ratio: f32
+    texture: SrgbTexture2d
 }
 
 impl Picture {
     pub fn new(texture: SrgbTexture2d) -> Self {
         Picture {
-            texture: texture,
-            aspect_ratio: 1.0 //image_dimensions.0 as f32 / image_dimensions.1 as f32
+            texture: texture
         }
     }
 }
@@ -42,18 +40,6 @@ impl PicturePhase {
     pub fn get_total_duration() -> u64 {
         PicturePhase::Coming.get_duration() +
             PicturePhase::There.get_duration()
-    }
-
-    pub fn get_duration_offset(&self) -> u64 {
-        let mut offset = 0;
-        for phase in &[PicturePhase::Coming, PicturePhase::There] {
-            if *phase == *self {
-                return offset
-            } else {
-                offset += phase.get_duration();
-            }
-        }
-        offset
     }
 }
 
@@ -199,8 +185,8 @@ impl<'a> Renderer<'a> {
 
         // elapse/rotate
         println!("current: {:?}\tnext: {:?}",
-                 self.current.as_ref().map(|&(ref pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t())),
-                 self.next.as_ref().map(|&(ref pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t()))
+                 self.current.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t())),
+                 self.next.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t()))
                 );
         let mut rotate_current = false;
         let mut create_next = false;
