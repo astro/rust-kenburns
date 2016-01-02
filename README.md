@@ -1,7 +1,5 @@
 # Ideas
 
-* Refactor into: main, reader, renderer
-* Aspect ratio
 * Zoom in & out
 * PictureState -> Transition?
 * Read from directories
