@@ -21,6 +21,11 @@ impl Picture {
             texture: texture
         }
     }
+
+    pub fn get_aspect_ratio(&self) -> f32 {
+        self.texture.get_width() as f32 /
+            self.texture.get_height().unwrap() as f32
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -216,26 +221,26 @@ impl<'a> Renderer<'a> {
     
     pub fn render(&self) {
         let mut target = self.display.draw();
-        target.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
-        // let (width, height) = target.get_dimensions();
-        // let aspect_ratio = width as f32 / height as f32;
+        let (target_width, target_height) = target.get_dimensions();
+        let target_aspect_ratio = target_width as f32 / target_height as f32;
 
-        
+        target.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+
         match self.current {
             None => (),
             Some((ref current_pic, ref current_state)) =>
-                self.render_picture(&mut target, current_pic, current_state)
+                self.render_picture(&mut target, current_pic, current_state, target_aspect_ratio)
         }
         match self.next {
             None => (),
             Some((ref next_pic, ref next_state)) =>
-                self.render_picture(&mut target, next_pic, next_state)
+                self.render_picture(&mut target, next_pic, next_state, target_aspect_ratio)
         }
 
         target.finish().unwrap();
     }
 
-    fn render_picture(&self, target: &mut Frame, pic: &Picture, state: &PictureState) {
+    fn render_picture(&self, target: &mut Frame, pic: &Picture, state: &PictureState, target_aspect_ratio: f32) {
         let shape = VertexBuffer::new(&self.display, &[
             Vertex { position: [-1.0,  1.0, 0.0], tex_coords: [0.0, 1.0] },
             Vertex { position: [ 1.0,  1.0, 0.0], tex_coords: [1.0, 1.0] },
@@ -248,6 +253,16 @@ impl<'a> Renderer<'a> {
             [0.0, 0.0, 1.0, 0.0],
             [0.0, 0.0, 0.0, 1.0f32]
         ];
+        /* Ratio correction */
+        let texture_aspect_ratio = pic.get_aspect_ratio();
+        if target_aspect_ratio > texture_aspect_ratio {
+            /* Too wide, stretch y: */
+            matrix[1][1] *= target_aspect_ratio / texture_aspect_ratio;
+        } else {
+            /* Too tall, stretch x: */
+            matrix[0][0] *= texture_aspect_ratio / target_aspect_ratio;
+        };
+        /* Zoom */
         let zoom = 1.0 + 0.1 * state.get_overflowing_t();
         matrix[0][0] *= zoom;
         matrix[1][1] *= zoom;
