@@ -41,7 +41,7 @@ impl PicturePhase {
     pub fn get_duration(&self) -> u64 {
         match self {
             &PicturePhase::There => 3000000,
-            _ => 1500000
+            _ => 1000000
         }
     }
 
@@ -268,7 +268,7 @@ impl<'a> Renderer<'a> {
             [0.0, 0.0, 1.0, 0.0],
             [0.0, 0.0, 0.0, 1.0f32]
         ];
-        let zoom = 1.0 + 0.2 * state.get_overflowing_t();
+        let zoom = 1.0 + 0.1 * state.get_overflowing_t();
         matrix[0][0] *= zoom;
         matrix[1][1] *= zoom;
         let params = glium::DrawParameters {
@@ -291,7 +291,7 @@ impl<'a> Renderer<'a> {
 }
 
 fn main() {
-    let (source_tx, source_rx) = sync_channel(1);
+    let (source_tx, source_rx) = sync_channel(0);
     let mut renderer = Renderer::new(source_rx);
     thread::spawn(move|| {
         let filenames: Vec<String> = std::env::args()
