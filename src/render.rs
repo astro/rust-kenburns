@@ -37,8 +37,8 @@ enum PicturePhase {
 impl PicturePhase {
     pub fn get_duration(&self) -> u64 {
         match self {
-            &PicturePhase::There => 3000000,
-            _ => 1000000
+            &PicturePhase::There => 2000000,
+            _ => 3000000
         }
     }
 
@@ -263,7 +263,14 @@ impl<'a> Renderer<'a> {
             matrix[0][0] *= texture_aspect_ratio / target_aspect_ratio;
         };
         /* Zoom */
-        let zoom = 1.0 + 0.1 * state.get_overflowing_t();
+        let t = state.get_t();
+        let z = if t < 0.5 {
+            // (2.0 * t).powf(2.0) / 2.0
+            t
+        } else {
+            1.0 - 0.5 * (1.0 - 2.0 * (t - 0.5)).powf(2.0)
+        };
+        let zoom = 1.0 + 0.1 * z;
         matrix[0][0] *= zoom;
         matrix[1][1] *= zoom;
         let params = DrawParameters {
