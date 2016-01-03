@@ -3,14 +3,15 @@ extern crate glium;
 extern crate image;
 extern crate time;
 
-use std::thread;
 use std::sync::mpsc::{sync_channel};
+use std::thread;
 
 mod render;
 mod util;
 mod source;
 
 use render::*;
+use source::Loader;
 
 fn main() {
     let (source_tx, source_rx) = sync_channel(0);
@@ -19,7 +20,7 @@ fn main() {
         let filenames: Vec<String> = std::env::args()
             .skip(1)
             .collect();
-        source::run(filenames, source_tx);
+        Loader::new(source_tx).run_loop(filenames);
     });
     
     while renderer.update() {
