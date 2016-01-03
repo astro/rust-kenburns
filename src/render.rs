@@ -286,16 +286,17 @@ impl<'a> Renderer<'a> {
             matrix[0][0] *= texture_aspect_ratio / target_aspect_ratio;
         };
         /* Zoom */
-        let t = state.get_t();
-        let z = if t < 0.5 {
-            // (2.0 * t).powf(2.0) / 2.0
-            t
-        } else {
-            1.0 - 0.5 * (1.0 - 2.0 * (t - 0.5)).powf(2.0)
-        };
         let zoom = 1.0 + 0.1 * (match state.zoom_direction {
-            ZoomDirection::In => z,
-            ZoomDirection::Out => 1.0 - z
+            ZoomDirection::In => state.get_overflowing_t(),
+            ZoomDirection::Out => {
+                let t = state.get_t();
+                if t < 0.5 {
+                    // 1.0 - (2.0 * t).powf(2.0) / 2.0
+                    1.0 - t
+                } else {
+                    0.5 * (1.0 - 2.0 * (t - 0.5)).powf(2.0)
+                }
+            }
         });
         matrix[0][0] *= zoom;
         matrix[1][1] *= zoom;
