@@ -7,6 +7,7 @@ use glium::draw_parameters::DepthTest;
 use glium::glutin::WindowBuilder;
 use glium::vertex::VertexBuffer;
 use glium::index::{NoIndices, PrimitiveType};
+use std::ops::Not;
 use std::sync::mpsc::Receiver;
 
 use util::*;
@@ -48,17 +49,36 @@ impl PicturePhase {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+enum ZoomDirection {
+    In,
+    Out
+}
+
+impl Not for ZoomDirection {
+    type Output = ZoomDirection;
+
+    fn not(self) -> ZoomDirection {
+        match self {
+            ZoomDirection::In => ZoomDirection::Out,
+            ZoomDirection::Out => ZoomDirection::In
+        }
+    }
+}
+
 struct PictureState {
-    start: u64
+    start: u64,
+    zoom_direction: ZoomDirection
 }
 
 impl PictureState {
-    pub fn new() -> Self {
+    pub fn new(zoom_direction: ZoomDirection) -> Self {
         PictureState {
-            start: get_us()
+            start: get_us(),
+            zoom_direction: zoom_direction
         }
     }
-    
+
     pub fn get_phase(&self) -> PicturePhase {
         let time = get_us() - self.start;
         let mut phase_offset = 0;
@@ -70,7 +90,7 @@ impl PictureState {
         }
         PicturePhase::There
     }
-    
+
     pub fn get_t(&self) -> f32 {
         self.get_overflowing_t().min(1.0)
     }
@@ -91,7 +111,7 @@ impl PictureState {
         }
         1.0
     }
-    
+
     pub fn get_alpha(&self) -> f32 {
         match self.get_phase() {
             PicturePhase::Coming => self.get_phase_t(),
@@ -107,7 +127,7 @@ struct Vertex {
 }
 implement_vertex!(Vertex, position, tex_coords);
 
-    
+
 pub struct Renderer<'a> {
     source_rx: Receiver<RawImage2d<'a, u8>>,
     display: GlutinFacade,
@@ -125,34 +145,34 @@ impl<'a> Renderer<'a> {
 
         let vertex_shader_src = r#"
             #version 140
-    
+
             in vec3 position;
             in vec2 tex_coords;
-    
+
             out vec2 v_tex_coords;
-    
+
             uniform mat4 matrix;
-    
+
             void main() {
                 v_tex_coords = tex_coords;
                 gl_Position = matrix * vec4(position, 1.0);
             }
         "#;
-    
+
         let fragment_shader_src = r#"
             #version 140
-    
+
             in vec2 v_tex_coords;
             uniform float alpha;
-    
+
             uniform sampler2D tex;
-    
+
             void main() {
                 gl_FragColor = texture2D(tex, v_tex_coords);
                 gl_FragColor.a = alpha;
             }
         "#;
-    
+
         let program = Program::from_source(&display, vertex_shader_src, fragment_shader_src,
                                            None).unwrap();
         Renderer {
@@ -211,14 +231,17 @@ impl<'a> Renderer<'a> {
             self.current = self.next.take();
         } else if create_next {
             let pic = self.load_next_pic();
-            let pic_state = PictureState::new();
+            let current_direction = self.current
+                .as_ref()
+                .map(|&(_, ref current_state)| current_state.zoom_direction);
+            let pic_state = PictureState::new(!current_direction.unwrap_or(ZoomDirection::Out));
             self.next = Some((pic, pic_state));
         }
 
         // continue main loop
         true
     }
-    
+
     pub fn render(&self) {
         let mut target = self.display.draw();
         let (target_width, target_height) = target.get_dimensions();
@@ -270,7 +293,10 @@ impl<'a> Renderer<'a> {
         } else {
             1.0 - 0.5 * (1.0 - 2.0 * (t - 0.5)).powf(2.0)
         };
-        let zoom = 1.0 + 0.1 * z;
+        let zoom = 1.0 + 0.1 * (match state.zoom_direction {
+            ZoomDirection::In => z,
+            ZoomDirection::Out => 1.0 - z
+        });
         matrix[0][0] *= zoom;
         matrix[1][1] *= zoom;
         let params = DrawParameters {
