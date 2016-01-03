@@ -7,3 +7,4 @@ authors = ["Astro <astro@spaceboyz.net>"]
 glium = "*"
 image = "*"
 time = "*"
+hyper = "*"

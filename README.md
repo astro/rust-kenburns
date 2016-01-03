@@ -1,7 +1,6 @@
 # Ideas
 
 * PictureState -> Transition?
-* Read from network
 * Read from feeds
 * Split pictures into tiles for smoother texture loading
 * Keyboad control:

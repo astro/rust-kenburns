@@ -1,19 +1,22 @@
 use std::fs::{metadata, File, read_dir, DirEntry};
-use std::io::{Read, Seek};
+use std::io::{Read, Seek, Cursor};
 use std::sync::mpsc::SyncSender;
 use glium::texture::RawImage2d;
 use image;
+use hyper;
 
 use util::*;
 
 pub struct Loader<'a> {
-    tx: SyncSender<RawImage2d<'a, u8>>
+    tx: SyncSender<RawImage2d<'a, u8>>,
+    http: hyper::client::Client
 }
 
 impl<'a> Loader<'a> {
     pub fn new(tx: SyncSender<RawImage2d<'a, u8>>) -> Loader<'a> {
         Loader {
-            tx: tx
+            tx: tx,
+            http: hyper::client::Client::new()
         }
     }
 
@@ -29,6 +32,19 @@ impl<'a> Loader<'a> {
     pub fn run_filename(&self, filename: &str) {
         if filename.starts_with("http://") ||
             filename.starts_with("https://") {
+
+            println!("GET {}", filename);
+            let res = self.http.get(filename).send().unwrap();
+            println!("HTTP {}: {:?}", res.status, res.headers.get::<hyper::header::ContentType>());
+            let is_jpeg = match res.headers.get::<hyper::header::ContentType>() {
+                Some(&hyper::header::ContentType(ref mime)) if (mime == &hyper::header::ContentType::jpeg().0) =>
+                    true,
+                _ =>
+                    false
+            };
+            if is_jpeg {
+                self.load_jpeg(Cursor::<Vec<u8>>::new(res.bytes().map(|b| b.unwrap()).collect()));
+            }
         } else {
             let attr = metadata(filename).unwrap();
             if attr.is_file() || attr.file_type().is_symlink() {
