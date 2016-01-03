@@ -4,6 +4,8 @@ use std::sync::mpsc::SyncSender;
 use glium::texture::RawImage2d;
 use image;
 use hyper;
+use hyper::mime::{Mime, TopLevel, SubLevel};
+use treexml;
 
 use util::*;
 
@@ -36,14 +38,29 @@ impl<'a> Loader<'a> {
             println!("GET {}", filename);
             let res = self.http.get(filename).send().unwrap();
             println!("HTTP {}: {:?}", res.status, res.headers.get::<hyper::header::ContentType>());
-            let is_jpeg = match res.headers.get::<hyper::header::ContentType>() {
-                Some(&hyper::header::ContentType(ref mime)) if (mime == &hyper::header::ContentType::jpeg().0) =>
-                    true,
+            let (is_jpeg, is_feed) = match res.headers.get::<hyper::header::ContentType>() {
+                Some(&hyper::header::ContentType(Mime(TopLevel::Image, SubLevel::Jpeg, _))) =>
+                    (true, false),
+                Some(&hyper::header::ContentType(Mime(TopLevel::Text, SubLevel::Xml, _))) =>
+                    (false, true),
                 _ =>
-                    false
+                    (false, false)
             };
             if is_jpeg {
                 self.load_jpeg(Cursor::<Vec<u8>>::new(res.bytes().map(|b| b.unwrap()).collect()));
+            } else if is_feed {
+                let doc = treexml::Document::parse(res).unwrap();
+                let root = doc.root.unwrap();
+                for channel in root.filter_children(|el| el.name == "channel") {
+                    for item in channel.filter_children(|el| el.name == "item") {
+                        for content in item.filter_children(|el| el.name == "content") {
+                            match content.attributes.get("url") {
+                                Some(url) => self.run_filename(url),
+                                None => ()
+                            }
+                        }
+                    }
+                }
             }
         } else {
             let attr = metadata(filename).unwrap();

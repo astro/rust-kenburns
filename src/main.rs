@@ -3,6 +3,7 @@ extern crate glium;
 extern crate image;
 extern crate time;
 extern crate hyper;
+extern crate treexml;
 
 use std::sync::mpsc::{sync_channel};
 use std::thread;
