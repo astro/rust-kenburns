@@ -49,6 +49,9 @@ impl<'a> Loader<'a> {
                     (true, false),
                 Some(&hyper::header::ContentType(Mime(TopLevel::Text, SubLevel::Xml, _))) =>
                     (false, true),
+                Some(&hyper::header::ContentType(Mime(TopLevel::Application, SubLevel::Ext(ref ext), _)))
+                    if ext.ends_with("+xml") =>
+                    (false, true),
                 _ =>
                     (false, false)
             };
