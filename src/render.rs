@@ -38,8 +38,8 @@ enum PicturePhase {
 impl PicturePhase {
     pub fn get_duration(&self) -> u64 {
         match self {
-            &PicturePhase::There => 2000000,
-            _ => 3000000
+            &PicturePhase::Coming => 1000000,
+            &PicturePhase::There  => 4000000
         }
     }
 
