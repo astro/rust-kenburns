@@ -1,6 +1,7 @@
 # Usage
 
 ```bash
+cargo run --release  -- "https://www.flickr.com/services/feeds/photos_public.gne?id=127035051@N06&lang=en-us&format=atom"
 cargo run --release -- "http://backend.deviantart.com/rss.xml?q=favby%3ADaystar-Art%2F53487288&type=deviation"
 cargo run --release  -- "http://backend.deviantart.com/rss.xml?q=favby%3AMeinFragezeichen%2F66073201&type=deviation"
 cargo run --release  -- "http://backend.deviantart.com/rss.xml?q=favby%3Aisider%2F52909647&type=deviation"

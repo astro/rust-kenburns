@@ -14,6 +14,10 @@ pub struct Loader<'a> {
     http: hyper::client::Client
 }
 
+/**
+ * * run*() methods: iterate over files
+ * * load*() methods: load one file
+ **/
 impl<'a> Loader<'a> {
     pub fn new(tx: SyncSender<RawImage2d<'a, u8>>) -> Loader<'a> {
         Loader {
@@ -65,19 +69,7 @@ impl<'a> Loader<'a> {
                         println!("Error loading: {}", e)
                 };
             } else if is_feed {
-                println!("Reading feed and parsing...");
-                let doc = treexml::Document::parse(res).unwrap();
-                let root = doc.root.unwrap();
-                for channel in root.filter_children(|el| el.name == "channel") {
-                    for item in channel.filter_children(|el| el.name == "item") {
-                        for content in item.filter_children(|el| el.name == "content") {
-                            match content.attributes.get("url") {
-                                Some(url) => self.run_filename(url),
-                                None => ()
-                            }
-                        }
-                    }
-                }
+                self.run_feed(res);
             }
         } else {
             let attr = metadata(filename).unwrap();
@@ -102,6 +94,45 @@ impl<'a> Loader<'a> {
                 for (_, entry) in entries {
                     self.run_filename(entry.path().to_str().unwrap());
                 }
+            }
+        }
+    }
+
+    fn run_feed<R: Read>(&self, res: R) {
+        println!("Reading feed and parsing...");
+        let doc = treexml::Document::parse(res).unwrap();
+        let root = doc.root.unwrap();
+        /* RSS */
+        for channel in root.filter_children(|el| el.name == "channel") {
+            for item in channel.filter_children(|el| el.name == "item") {
+                self.load_feed_item(item);
+            }
+        }
+        /* ATOM */
+        for entry in root.filter_children(|el| el.name == "entry") {
+            self.load_feed_item(entry);
+        }
+    }
+
+    fn load_feed_item(&self, item: &treexml::Element) {
+        /* <atom:link rel="enclosure" href="http://..."/> */
+        for content in item.filter_children(|el| el.name == "link") {
+            match (content.attributes.get("rel"), content.attributes.get("href")) {
+                (Some(rel), Some(url)) if rel == "enclosure" => {
+                    self.run_filename(url);
+                    return
+                },
+                _ => ()
+            }
+        }
+        /* <media:content url="http://..."/> */
+        for content in item.filter_children(|el| el.name == "content") {
+            match content.attributes.get("url") {
+                Some(url) => {
+                    self.run_filename(url);
+                    return
+                },
+                None => ()
             }
         }
     }
