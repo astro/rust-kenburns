@@ -11,9 +11,11 @@ use std::thread;
 mod render;
 mod util;
 mod source;
+mod frame_counter;
 
 use render::*;
 use source::Loader;
+use frame_counter::FrameCounter;
 
 fn main() {
     let (source_tx, source_rx) = sync_channel(0);
@@ -24,8 +26,10 @@ fn main() {
             .collect();
         Loader::new(source_tx).run_loop(filenames);
     });
-    
+
+    let mut counter = FrameCounter::new(1_000_000);
     while renderer.update() {
         renderer.render();
+        counter.tick();
     }
 }
