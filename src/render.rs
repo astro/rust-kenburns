@@ -91,10 +91,6 @@ impl PictureState {
         PicturePhase::There
     }
 
-    pub fn get_t(&self) -> f32 {
-        self.get_overflowing_t().min(1.0)
-    }
-
     pub fn get_overflowing_t(&self) -> f32 {
         let now = get_us();
         (now - self.start) as f32 / PicturePhase::get_total_duration() as f32
@@ -287,16 +283,16 @@ impl<'a> Renderer<'a> {
         };
         /* Zoom */
         let zoom = 1.0 + 0.1 * (match state.zoom_direction {
-            ZoomDirection::In => state.get_overflowing_t(),
-            ZoomDirection::Out => {
-                let t = state.get_t();
-                if t < 0.5 {
-                    // 1.0 - (2.0 * t).powf(2.0) / 2.0
-                    1.0 - t
-                } else {
-                    0.5 * (1.0 - 2.0 * (t - 0.5)).powf(2.0)
-                }
-            }
+            ZoomDirection::In =>
+                /* Linear zooming in */
+                state.get_overflowing_t(),
+            ZoomDirection::Out =>
+                /* Slowing zoom out
+                 * that stops before showing black borders
+                 */
+                ((1.2 - state.get_overflowing_t()) / 1.2)
+                .max(0.0)
+                .powf(2.0)
         });
         matrix[0][0] *= zoom;
         matrix[1][1] *= zoom;
