@@ -36,7 +36,13 @@ impl<'a> Loader<'a> {
             filename.starts_with("https://") {
 
             println!("GET {}", filename);
-            let res = self.http.get(filename).send().unwrap();
+            let mut res = match self.http.get(filename).send() {
+                Err(e) => {
+                    println!("{}", e);
+                    return
+                },
+                Ok(res) => res
+            };
             println!("HTTP {}: {:?}", res.status, res.headers.get::<hyper::header::ContentType>());
             let (is_jpeg, is_feed) = match res.headers.get::<hyper::header::ContentType>() {
                 Some(&hyper::header::ContentType(Mime(TopLevel::Image, SubLevel::Jpeg, _))) =>
@@ -47,8 +53,16 @@ impl<'a> Loader<'a> {
                     (false, false)
             };
             if is_jpeg {
-                self.load_jpeg(Cursor::<Vec<u8>>::new(res.bytes().map(|b| b.unwrap()).collect()));
+                let mut buf = Vec::new();
+                println!("Reading JPEG til end...");
+                match res.read_to_end(&mut buf) {
+                    Ok(_) =>
+                        self.load_jpeg(Cursor::new(buf)),
+                    Err(e) =>
+                        println!("Error loading: {}", e)
+                };
             } else if is_feed {
+                println!("Reading feed and parsing...");
                 let doc = treexml::Document::parse(res).unwrap();
                 let root = doc.root.unwrap();
                 for channel in root.filter_children(|el| el.name == "channel") {
@@ -89,15 +103,27 @@ impl<'a> Loader<'a> {
         }
     }
 
-    pub fn load_jpeg<R: Read + Seek>(&self, file: R) {
+    pub fn load_jpeg<R: Read + Seek>(&self, file: R) -> () {
         let t1 = get_us();
-        let image = image::load(file, image::JPEG).unwrap().to_rgba();
+        let image = match image::load(file, image::JPEG) {
+            Ok(image) => image.to_rgba(),
+            Err(e) => {
+                println!("Error loading JPEG: {}", e);
+                return
+            }
+        };
         let t2 = get_us();
         let image_dimensions = image.dimensions();
         let t3 = get_us();
         let image = RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dimensions);
         let t4 = get_us();
         println!("Loaded image in {} + {} + {} us", t2 - t1, t3 - t2, t4 - t3);
-        self.tx.send(image).unwrap();
+        match self.tx.send(image) {
+            Ok(()) => (),
+            Err(e) => {
+                println!("Error transferring JPEG to main thread: {}", e);
+                return
+            }
+        }
     }
 }
