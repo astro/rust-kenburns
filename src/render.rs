@@ -12,6 +12,9 @@ use std::sync::mpsc::Receiver;
 
 use util::*;
 
+const SHOW_DURATION: u64 = 5_000_000;
+const TRANSITION_DURATION: u64 = 1_000_000;
+
 struct Picture {
     texture: SrgbTexture2d
 }
@@ -26,26 +29,6 @@ impl Picture {
     pub fn get_aspect_ratio(&self) -> f32 {
         self.texture.get_width() as f32 /
             self.texture.get_height().unwrap() as f32
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-enum PicturePhase {
-    Coming,
-    There
-}
-
-impl PicturePhase {
-    pub fn get_duration(&self) -> u64 {
-        match self {
-            &PicturePhase::Coming => 1000000,
-            &PicturePhase::There  => 4000000
-        }
-    }
-
-    pub fn get_total_duration() -> u64 {
-        PicturePhase::Coming.get_duration() +
-            PicturePhase::There.get_duration()
     }
 }
 
@@ -79,40 +62,34 @@ impl PictureState {
         }
     }
 
-    pub fn get_phase(&self) -> PicturePhase {
-        let time = get_us() - self.start;
-        let mut phase_offset = 0;
-        for phase in &[PicturePhase::Coming, PicturePhase::There] {
-            if time >= phase_offset && time < phase_offset + phase.get_duration() {
-                return *phase;
-            }
-            phase_offset += phase.get_duration();
-        }
-        PicturePhase::There
+    pub fn has_transitioned(&self) -> bool {
+        (get_us() - self.start) > TRANSITION_DURATION
     }
 
     pub fn get_overflowing_t(&self) -> f32 {
         let now = get_us();
-        (now - self.start) as f32 / PicturePhase::get_total_duration() as f32
+        (now - self.start) as f32 / SHOW_DURATION as f32
     }
 
-    pub fn get_phase_t(&self) -> f32 {
-        let time = get_us() - self.start;
-        let mut phase_offset = 0;
-        for phase in &[PicturePhase::Coming, PicturePhase::There] {
-            if time >= phase_offset && time <= phase_offset + phase.get_duration() {
-                return (time - phase_offset) as f32 / phase.get_duration() as f32;
-            }
-            phase_offset += phase.get_duration();
-        }
-        1.0
+    pub fn get_zoom(&self) -> f32 {
+        let time_zoom = match self.zoom_direction {
+            ZoomDirection::In =>
+                /* Linear zooming in */
+                self.get_overflowing_t(),
+            ZoomDirection::Out =>
+                /* Slowing zoom out
+                * that stops before showing black borders
+                */
+                (1.0 - self.get_overflowing_t())
+                .max(0.0)
+                .powf(2.0)
+        };
+        1.0 + 0.1 * time_zoom
     }
 
     pub fn get_alpha(&self) -> f32 {
-        match self.get_phase() {
-            PicturePhase::Coming => self.get_phase_t(),
-            _ => 1.0
-        }
+        let age = (get_us() - self.start) as f32;
+        (age / TRANSITION_DURATION as f32).min(1.0)
     }
 }
 
@@ -205,21 +182,17 @@ impl<'a> Renderer<'a> {
         }
 
         // elapse/rotate
-        // println!("current: {:?}\tnext: {:?}",
-        //          self.current.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t())),
-        //          self.next.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t()))
-        //         );
         let mut rotate_current = false;
         let mut create_next = false;
+        let now = get_us();
         match (&self.current, &self.next) {
             (_, &Some((_, ref next_state)))
-                if next_state.get_phase() == PicturePhase::There =>
+                if next_state.has_transitioned() =>
                     rotate_current = true,
             (&None, &None) =>
                 create_next = true,
             (&Some((_, ref current_state)), &None)
-                if current_state.get_phase() == PicturePhase::There &&
-                    current_state.get_phase_t() >= 1.0 =>
+                if now - current_state.start >= SHOW_DURATION - TRANSITION_DURATION =>
                     create_next = true,
             (_, _) => ()
         }
@@ -282,18 +255,7 @@ impl<'a> Renderer<'a> {
             matrix[0][0] *= texture_aspect_ratio / target_aspect_ratio;
         };
         /* Zoom */
-        let zoom = 1.0 + 0.1 * (match state.zoom_direction {
-            ZoomDirection::In =>
-                /* Linear zooming in */
-                state.get_overflowing_t(),
-            ZoomDirection::Out =>
-                /* Slowing zoom out
-                 * that stops before showing black borders
-                 */
-                ((1.2 - state.get_overflowing_t()) / 1.2)
-                .max(0.0)
-                .powf(2.0)
-        });
+        let zoom = state.get_zoom();
         matrix[0][0] *= zoom;
         matrix[1][1] *= zoom;
         let params = DrawParameters {
