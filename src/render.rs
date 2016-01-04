@@ -209,10 +209,10 @@ impl<'a> Renderer<'a> {
         }
 
         // elapse/rotate
-        println!("current: {:?}\tnext: {:?}",
-                 self.current.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t())),
-                 self.next.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t()))
-                );
+        // println!("current: {:?}\tnext: {:?}",
+        //          self.current.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t())),
+        //          self.next.as_ref().map(|&(ref _pic, ref pic_state)| (pic_state.get_phase(), pic_state.get_phase_t(), pic_state.get_t()))
+        //         );
         let mut rotate_current = false;
         let mut create_next = false;
         match (&self.current, &self.next) {
