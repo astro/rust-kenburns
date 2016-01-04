@@ -100,17 +100,25 @@ impl<'a> Loader<'a> {
 
     fn run_feed<R: Read>(&self, res: R) {
         println!("Reading feed and parsing...");
-        let doc = treexml::Document::parse(res).unwrap();
-        let root = doc.root.unwrap();
-        /* RSS */
-        for channel in root.filter_children(|el| el.name == "channel") {
-            for item in channel.filter_children(|el| el.name == "item") {
-                self.load_feed_item(item);
-            }
-        }
-        /* ATOM */
-        for entry in root.filter_children(|el| el.name == "entry") {
-            self.load_feed_item(entry);
+        match treexml::Document::parse(res) {
+            Ok(treexml::Document {
+                root: Some(root),
+                version: _,
+                encoding: _
+            }) => {
+                /* RSS */
+                for channel in root.filter_children(|el| el.name == "channel") {
+                    for item in channel.filter_children(|el| el.name == "item") {
+                        self.load_feed_item(item);
+                    }
+                }
+                /* ATOM */
+                for entry in root.filter_children(|el| el.name == "entry") {
+                    self.load_feed_item(entry);
+                }
+            },
+            Ok(_) => println!("Error parsing XML: no root element!"),
+            Err(e) => println!("Error parsing XML: {}", e)
         }
     }
 
