@@ -140,9 +140,11 @@ impl<'a> Renderer<'a> {
 
             uniform sampler2D tex;
 
+            out vec4 frag_color;
+
             void main() {
-                gl_FragColor = texture2D(tex, v_tex_coords);
-                gl_FragColor.a = alpha;
+                frag_color = texture(tex, v_tex_coords);
+                frag_color.a = alpha;
             }
         "#;
 
