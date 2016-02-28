@@ -159,16 +159,19 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    fn load_next_pic(&mut self) -> Picture {
+    fn load_next_pic(&mut self) -> Option<Picture> {
         let t1 = get_us();
-        let image = self.source_rx.recv().unwrap();
+        let image = match self.source_rx.try_recv() {
+            Err(_) => return None,
+            Ok(image) => image
+        };
         let t2 = get_us();
         let texture = SrgbTexture2d::new(&self.display, image).unwrap();
         let t3 = get_us();
         let pic = Picture::new(texture);
         let t4 = get_us();
         println!("Converted pic in {} + {} + {} us", t2 - t1, t3 - t2, t4 - t3);
-        pic
+        Some(pic)
     }
 
     pub fn update(&mut self) -> bool {
@@ -201,12 +204,13 @@ impl<'a> Renderer<'a> {
         if rotate_current {
             self.current = self.next.take();
         } else if create_next {
-            let pic = self.load_next_pic();
-            let current_direction = self.current
-                .as_ref()
-                .map(|&(_, ref current_state)| current_state.zoom_direction);
-            let pic_state = PictureState::new(!current_direction.unwrap_or(ZoomDirection::Out));
-            self.next = Some((pic, pic_state));
+            self.load_next_pic().map(|pic|{
+                let current_direction = self.current
+                    .as_ref()
+                    .map(|&(_, ref current_state)| current_state.zoom_direction);
+                let pic_state = PictureState::new(!current_direction.unwrap_or(ZoomDirection::Out));
+                self.next = Some((pic, pic_state));
+            });
         }
 
         // continue main loop
