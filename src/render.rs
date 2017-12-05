@@ -1,10 +1,8 @@
-use glium::{DisplayBuild, Surface};
-use glium::glutin::{Event, VirtualKeyCode, ElementState};
+use glium::{Display, Surface};
+use glium::glutin::{WindowBuilder, ContextBuilder, EventsLoop, Event, WindowEvent, VirtualKeyCode, ElementState};
 use glium::texture::{SrgbTexture2d, RawImage2d};
-use glium::backend::glutin_backend::GlutinFacade;
 use glium::{Program, DrawParameters, Depth, Blend, Frame};
 use glium::draw_parameters::DepthTest;
-use glium::glutin::WindowBuilder;
 use glium::vertex::VertexBuffer;
 use glium::index::{NoIndices, PrimitiveType};
 use std::ops::Not;
@@ -103,7 +101,8 @@ implement_vertex!(Vertex, position, tex_coords);
 
 pub struct Renderer<'a> {
     source_rx: Receiver<RawImage2d<'a, u8>>,
-    display: GlutinFacade,
+    display: Display,
+    events_loop: EventsLoop,
     program: Program,
     current: Option<(Picture, PictureState)>,
     next: Option<(Picture, PictureState)>
@@ -111,11 +110,16 @@ pub struct Renderer<'a> {
 
 impl<'a> Renderer<'a> {
     pub fn new(source_rx: Receiver<RawImage2d<'a, u8>>) -> Renderer<'a> {
-        let display = WindowBuilder::new()
-            .with_depth_buffer(24)
-            .with_vsync()
-            .build_glium().unwrap();
+        let window = WindowBuilder::new()
+            .with_title("Rust<KenBurns>");
 
+
+        let context = ContextBuilder::new()
+            .with_depth_buffer(24)
+            .with_vsync(true);
+        let events_loop = EventsLoop::new();
+        let display = Display::new(window, context, &events_loop).unwrap();
+        
         let vertex_shader_src = r#"
             #version 140
 
@@ -151,9 +155,10 @@ impl<'a> Renderer<'a> {
         let program = Program::from_source(&display, vertex_shader_src, fragment_shader_src,
                                            None).unwrap();
         Renderer {
-            source_rx: source_rx,
-            display: display,
-            program: program,
+            source_rx,
+            display,
+            events_loop,
+            program,
             current: None,
             next: None
         }
@@ -175,16 +180,23 @@ impl<'a> Renderer<'a> {
     }
 
     pub fn update(&mut self) -> bool {
+        let mut running = true;
         // events
-        for ev in self.display.poll_events() {
+        self.events_loop.poll_events(|ev| {
             match ev {
-                Event::Closed => return false,
-                Event::KeyboardInput(ElementState::Released, _, Some(key))
-                    if key == VirtualKeyCode::Escape || key == VirtualKeyCode::Q =>
-                    return false,
-                ev => println!("ev: {:?}", ev)
+                Event::WindowEvent { event, window_id: _ } =>
+                    match event {
+                        WindowEvent::KeyboardInput { input, device_id: _ }
+                        if input.state == ElementState::Released
+                            && input.virtual_keycode == Some(VirtualKeyCode::Escape) =>
+                            running = false,
+                        WindowEvent::Closed =>
+                            running = false,
+                        _ => (),
+                    },
+                _ => (),
             }
-        }
+        });
 
         // elapse/rotate
         let mut rotate_current = false;
@@ -213,8 +225,7 @@ impl<'a> Renderer<'a> {
             });
         }
 
-        // continue main loop
-        true
+        running
     }
 
     pub fn render(&self) {

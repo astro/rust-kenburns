@@ -2,7 +2,10 @@
 extern crate glium;
 extern crate image;
 extern crate time;
+extern crate futures;
+extern crate tokio_core;
 extern crate hyper;
+extern crate hyper_tls;
 extern crate treexml;
 
 use std::sync::mpsc::{sync_channel};
@@ -10,6 +13,7 @@ use std::thread;
 
 mod render;
 mod util;
+mod http;
 mod source;
 mod frame_counter;
 
