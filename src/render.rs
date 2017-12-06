@@ -10,8 +10,8 @@ use std::sync::mpsc::Receiver;
 
 use util::*;
 
-const SHOW_DURATION: u64 = 5_000_000;
-const TRANSITION_DURATION: u64 = 1_000_000;
+const SHOW_DURATION: u64 = 3_000_000;
+const TRANSITION_DURATION: u64 = 300_000;
 
 struct Picture {
     texture: SrgbTexture2d

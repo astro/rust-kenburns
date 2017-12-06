@@ -23,7 +23,7 @@ use source::Loader;
 use frame_counter::FrameCounter;
 
 fn main() {
-    let (source_tx, source_rx) = sync_channel(0);
+    let (source_tx, source_rx) = sync_channel(2);
     let mut renderer = Renderer::new(source_rx);
     thread::spawn(move|| {
         let filenames: Vec<String> = std::env::args()
