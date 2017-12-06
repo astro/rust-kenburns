@@ -7,6 +7,7 @@ extern crate tokio_core;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate treexml;
+extern crate num_iter;
 
 use std::sync::mpsc::{sync_channel};
 use std::thread;

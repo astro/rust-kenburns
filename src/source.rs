@@ -1,9 +1,8 @@
-use std::panic::set_hook;
 use std::fs::{metadata, File, read_dir, DirEntry};
-use std::io::{BufRead, BufReader, Read, Seek, Cursor};
+use std::io::{BufReader, Read};
 use std::sync::mpsc::SyncSender;
 use glium::texture::RawImage2d;
-use image;
+use image::{jpeg, ImageDecoder, DynamicImage, ImageResult};
 use hyper::header::ContentType;
 use hyper::mime::{IMAGE_JPEG, TEXT_XML, APPLICATION};
 use treexml;
@@ -27,8 +26,6 @@ impl<'a> Loader<'a> {
     }
 
     pub fn run_loop(&self, filenames: Vec<String>) {
-        set_hook(Box::new(|info| println!("Loader panic: {:?}", info)));
-        
         loop {
             for filename in &filenames {
                 self.run_filename(filename);
@@ -69,22 +66,12 @@ impl<'a> Loader<'a> {
                 };
                 if is_jpeg {
                     println!("Reading JPEG til end...");
-                    match res.body() {
-                            Ok(body) =>
-                                self.load_jpeg(Cursor::new(body)),
-                            Err(e) =>
-                                println!("Error loading: {}", e)
-                    };
+                    let body = res.body();
+                    self.load_jpeg(BufReader::new(body))
                 } else if is_feed {
                     println!("Reading feed til end...");
-                    match res.body() {
-                            Ok(body) => {
-                                println!("body: {}", body.len());
-                                self.run_feed(Cursor::new(body))
-                            },
-                            Err(e) =>
-                                println!("Error loading: {}", e)
-                    };
+                    let body = res.body();
+                    self.run_feed(body)
                 }
             } else {
                 let attr = metadata(filename).unwrap();
@@ -160,10 +147,10 @@ impl<'a> Loader<'a> {
         }
     }
 
-    pub fn load_jpeg<R: BufRead + Read + Seek>(&self, file: R) -> () {
+    pub fn load_jpeg<R: Read>(&self, file: R) -> () {
         let t1 = get_us();
         println!("Load JPEG...");
-        let image = match image::load(file, image::JPEG) {
+        let image = match decoder_to_image(jpeg::JPEGDecoder::new(file)) {
             Ok(image) => { println!("Loaded image!"); image.to_rgba() },
             Err(e) => {
                 println!("Error loading JPEG: {}", e);
@@ -183,5 +170,67 @@ impl<'a> Loader<'a> {
                 return
             }
         }
+    }
+}
+
+/// From image::dynimage (private)
+/// 
+/// Decodes an image and stores it into a dynamic image
+pub fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<DynamicImage> {
+    use std::iter;
+    use image;
+    use image::{DynamicImage, ImageBuffer, ColorType};
+    use image::DecodingResult::U8;
+    use num_iter;
+
+    let mut codec = codec;
+
+    let color  = try!(codec.colortype());
+    let buf    = try!(codec.read_image());
+    let (w, h) = try!(codec.dimensions());
+
+    let image = match (color, buf) {
+        (ColorType::RGB(8), U8(buf)) => {
+            ImageBuffer::from_raw(w, h, buf).map(DynamicImage::ImageRgb8)
+        }
+
+        (ColorType::RGBA(8), U8(buf)) => {
+            ImageBuffer::from_raw(w, h, buf).map(DynamicImage::ImageRgba8)
+        }
+
+        (ColorType::Gray(8), U8(buf)) => {
+            ImageBuffer::from_raw(w, h, buf).map(DynamicImage::ImageLuma8)
+        }
+
+        (ColorType::GrayA(8), U8(buf)) => {
+            ImageBuffer::from_raw(w, h, buf).map(DynamicImage::ImageLumaA8)
+        }
+        (ColorType::Gray(bit_depth), U8(ref buf)) if bit_depth == 1 || bit_depth == 2 || bit_depth == 4 => {
+            // Note: this conversion assumes that the scanlines begin on byte boundaries
+            let mask = (1u8 << bit_depth as usize) - 1;
+            let scaling_factor = 255/((1 << bit_depth as usize) - 1);
+            let skip = (w % 8)/u32::from(bit_depth);
+            let row_len = w + skip;
+            let p = buf
+                       .iter()
+                       .flat_map(|&v|
+                           num_iter::range_step_inclusive(8i8-(bit_depth as i8), 0, -(bit_depth as i8))
+                           .zip(iter::repeat(v))
+                       )
+                       // skip the pixels that can be neglected because scanlines should
+                       // start at byte boundaries
+                       .enumerate().filter(|&(i, _)| i % (row_len as usize) < (w as usize) ).map(|(_, p)| p)
+                       .map(|(shift, pixel)|
+                           (pixel & mask << shift as usize) >> shift as usize
+                       )
+                       .map(|pixel| pixel * scaling_factor)
+                       .collect();
+            ImageBuffer::from_raw(w, h, p).map(DynamicImage::ImageLuma8)
+        },
+        _ => return Err(image::ImageError::UnsupportedColor(color))
+    };
+    match image {
+        Some(image) => Ok(image),
+        None => Err(image::ImageError::DimensionError)
     }
 }
