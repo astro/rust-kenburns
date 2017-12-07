@@ -3,6 +3,7 @@ use std::io::{BufReader, Read};
 use std::sync::mpsc::SyncSender;
 use glium::texture::RawImage2d;
 use image::{jpeg, ImageDecoder, DynamicImage, ImageResult};
+use hyper::Uri;
 use hyper::header::ContentType;
 use hyper::mime::{IMAGE_JPEG, TEXT_XML, APPLICATION};
 use treexml;
@@ -39,7 +40,11 @@ impl<'a> Loader<'a> {
             filename.starts_with("https://") {
 
                 println!("GET {}", filename);
-                let res = match get(&filename) {
+                let uri = match filename.parse() {
+                    Ok(uri) => uri,
+                    Err(_) => return,
+                };
+                let res = match get(&uri) {
                     Err(e) => {
                         println!("{}", e);
                         return
@@ -71,7 +76,7 @@ impl<'a> Loader<'a> {
                 } else if is_feed {
                     println!("Reading feed til end...");
                     let body = res.body();
-                    self.run_feed(body)
+                    self.run_feed(&uri, body)
                 }
             } else {
                 let attr = metadata(filename).unwrap();
@@ -100,7 +105,7 @@ impl<'a> Loader<'a> {
             }
     }
 
-    fn run_feed<R: Read>(&self, res: R) {
+    fn run_feed<R: Read>(&self, base: &Uri, res: R) {
         println!("Reading feed and parsing...");
         match treexml::Document::parse(res) {
             Ok(treexml::Document {
@@ -111,12 +116,12 @@ impl<'a> Loader<'a> {
                 /* RSS */
                 for channel in root.filter_children(|el| el.name == "channel") {
                     for item in channel.filter_children(|el| el.name == "item") {
-                        self.load_feed_item(item);
+                        self.load_feed_item(base, item);
                     }
                 }
                 /* ATOM */
                 for entry in root.filter_children(|el| el.name == "entry") {
-                    self.load_feed_item(entry);
+                    self.load_feed_item(base, entry);
                 }
             },
             Ok(_) => println!("Error parsing XML: no root element!"),
@@ -124,12 +129,16 @@ impl<'a> Loader<'a> {
         }
     }
 
-    fn load_feed_item(&self, item: &treexml::Element) {
+    fn load_feed_item(&self, base: &Uri, item: &treexml::Element) {
+        let run_link = |href| {
+            uri_join(base, href)
+                .map(|url| self.run_filename(&url));
+        };
         /* <atom:link rel="enclosure" href="http://..."/> */
         for content in item.filter_children(|el| el.name == "link") {
             match (content.attributes.get("rel"), content.attributes.get("href")) {
                 (Some(rel), Some(url)) if rel == "enclosure" => {
-                    self.run_filename(url);
+                    run_link(url);
                     return
                 },
                 _ => ()
@@ -139,7 +148,7 @@ impl<'a> Loader<'a> {
         for content in item.filter_children(|el| el.name == "content") {
             match content.attributes.get("url") {
                 Some(url) => {
-                    self.run_filename(url);
+                    run_link(url);
                     return
                 },
                 None => ()
@@ -232,5 +241,31 @@ pub fn decoder_to_image<I: ImageDecoder>(codec: I) -> ImageResult<DynamicImage> 
     match image {
         Some(image) => Ok(image),
         None => Err(image::ImageError::DimensionError)
+    }
+}
+
+/// Incomplete
+fn uri_join(base: &Uri, href: &str) -> Option<String> {
+    if href.starts_with("http://") || href.starts_with("https://")  {
+        Some(href.to_owned())
+    } else if href.starts_with("/") {
+        base.scheme()
+            .and_then(
+                |scheme| base.authority()
+                    .map(
+                        |authority|
+                        format!("{}://{}{}", scheme, authority, href)
+                    )
+            )
+    } else {
+        // Incomplete!
+        base.scheme()
+            .and_then(
+                |scheme| base.authority()
+                    .map(
+                        |authority|
+                        format!("{}://{}/{}", scheme, authority, href)
+                    )
+            )
     }
 }

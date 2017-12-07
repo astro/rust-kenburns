@@ -4,8 +4,7 @@ use tokio_core::reactor::Core;
 use hyper;
 use hyper_tls::HttpsConnector;
 
-pub fn get<S: AsRef<str>>(url: S) -> Result<Response, hyper::Error> {
-    let uri: hyper::Uri = url.as_ref().parse()?;
+pub fn get(uri: &hyper::Uri) -> Result<Response, hyper::Error> {
     let mut core = Core::new()?;
     let handle = core.handle();
     match uri.scheme() {
